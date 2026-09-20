@@ -5,24 +5,24 @@ const app = express();
 
 app.use(express.json());
 
-// এক্সপ্রেস যদি কোনো কারণে স্ট্যাটিক ফোল্ডার মিস করে, এটি সরাসরি index.html ফাইলটি পাঠাবে
+// সরাসরি একই ডিরেক্টরি থেকে index.html ফাইলটি ব্রাউজারে শো করার কোড
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// অতিরিক্ত ব্যাকআপ হিসেবে স্ট্যাটিক রুট সচল রাখা
-app.use(express.static(path.join(__dirname, 'public')));
-
 const port = process.env.PORT || 8080; 
-// ... বাকি নিচের সব কোড (activeClients, app.post ইত্যাদি) আগে যা ছিল হুবহু তাই থাকবে।
 
+// সচল আইডিগুলো জমা রাখার গ্লোবাল অবজেক্ট
+const activeClients = {};
+
+app.post('/api/start-bots', (req, res) => {
+    const { tokens, vcId } = req.body;
 
     if (!tokens || !Array.isArray(tokens) || tokens.length === 0 || !vcId) {
         return res.status(400).json({ error: 'সঠিক টোকেন এবং ভিসি আইডি প্রদান করুন।' });
     }
 
     tokens.forEach((token, index) => {
-        // টোকেন আগে রান করা থাকলে সেশন রিস্টার্ট হবে
         if (activeClients[token]) {
             try { activeClients[token].destroy(); } catch(e){}
         }
@@ -38,8 +38,8 @@ const port = process.env.PORT || 8080;
                 const channel = await client.channels.fetch(vcId);
                 if (channel) {
                     await client.voice.joinChannel(channel, {
-                        selfMute: false, // আনমিউট রাখার জন্য false
-                        selfDeaf: false  // আনডাফ রাখার জন্য false
+                        selfMute: false, 
+                        selfDeaf: false  
                     });
                     console.log(`[Dashboard ID ${index + 1}] আনমিউট অবস্থায় ভিসি-তে জয়েন করেছে।`);
                 }
@@ -54,7 +54,7 @@ const port = process.env.PORT || 8080;
                     .setURL('https://twitch.tv')
                     .setName('Chithi Ghor')
                     .setStartTimestamp(Date.now())
-                    .setAssetsLargeImage('https://postimg.cc') // স্থায়ী লোগো লিঙ্ক
+                    .setAssetsLargeImage('https://postimg.cc') 
                     .setAssetsLargeText('Chithi Ghor')
                     // ⚠️ নিচের লিঙ্কের জায়গায় আপনার আসল ডিসকর্ড সার্ভারের ইনভাইট লিঙ্কটি বসিয়ে দিন
                     .addButton('Join Server', 'https://discord.gg'); 

@@ -12,8 +12,11 @@ app.get('/', (req, res) => {
 
 const port = process.env.PORT || 8080; 
 
-// সচল আইডিগুলো এবং তাদের ভিসি আইডি ট্র্যাক করার গ্লোবাল অবজেক্ট
+// সচল আইডিগুলো জমা রাখার গ্লোবাল অবজেক্ট
 const activeClients = {};
+
+// মানুষের মতো আচরণ তৈরির জন্য র্যান্ডম ডিলে (দেরি করার) ফাংশন
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 app.post('/api/start-bots', (req, res) => {
     const { tokens, vcId } = req.body;
@@ -22,53 +25,61 @@ app.post('/api/start-bots', (req, res) => {
         return res.status(400).json({ error: 'সঠিক টোকেন এবং ভিসি আইডি প্রদান করুন।' });
     }
 
-    tokens.forEach((token, index) => {
+    tokens.forEach(async (token, index) => {
         if (activeClients[token]) {
             try { activeClients[token].destroy(); } catch(e){}
         }
 
-        // র‍্যাম বাঁচানোর জন্য অপ্রয়োজনীয় ক্যাশ ও ইভেন্ট বন্ধ রাখা হয়েছে
+        // র‍্যাম বাঁচানোর জন্য এবং অফিসিয়াল উইন্ডোজ ক্লায়েন্ট নকল করার সেটিংস
         const client = new Client({ 
             checkUpdate: false,
             syncStatus: false,
-            patchVoice: true
+            patchVoice: true, // ভয়েস প্রোটোকল স্ট্যাবল রাখার জন্য
+            ws: { properties: { \$os: 'Windows', browser: 'Discord Client', release_channel: 'stable' } }
         });
         activeClients[token] = client;
 
-        // ভিসি জয়েন করার জন্য একটি রিইউজেবল ফাংশন
+        // একই সাথে সব আইডি জয়েন করে ডিসকর্ডের রেট-লিমিটে পড়া এড়াতে র্যান্ডম গ্যাপ তৈরি
+        const waitTime = (index * 6000) + Math.floor(Math.random() * 2000);
+        await delay(waitTime);
+
         const connectToVC = async () => {
             try {
                 const channel = await client.channels.fetch(vcId);
                 if (channel) {
+                    // ভয়েস এক্সপি (Voice XP) নিশ্চিত করার জন্য সম্পূর্ণ আনমিউট ও আনডাফ জয়েন
                     await client.voice.joinChannel(channel, {
-                        selfMute: false, 
-                        selfDeaf: false  
+                        selfMute: false,  // মিউট থাকবে না (XP পাওয়ার জন্য জরুরি)
+                        selfDeaf: false,  // ডেফ থাকবে en (XP পাওয়ার জন্য জরুরি)
+                        selfVideo: false  // ক্যামেরা অফ থাকবে র‍্যাম বাঁচানোর জন্য
                     });
-                    console.log(`[Dashboard ID ${index + 1}] আনমিউট অবস্থায় ভিসি-তে জয়েন করেছে।`);
+                    console.log(`[Voice-XP ID ${index + 1}] ${client.user.tag} আনমিউট অবস্থায় ভিসি-তে সচল আছে।`);
                 }
             } catch (err) {
-                console.error(`ভিসি জয়েন এরর (${client.user.tag}):`, err.message);
-                // যদি কোনো কারণে জয়েন করতে না পারে, তবে ৫ সেকেন্ড পর আবার চেষ্টা করবে
-                setTimeout(connectToVC, 5000);
+                console.error(`[Voice-XP ID ${index + 1}] ভিসি জয়েন এরর:`, err.message);
+                // যদি কোনো কারণে ডিসকানেক্ট হয়, ১০ সেকেন্ড পর আবার অটো-ট্রাই করবে
+                setTimeout(connectToVC, 10000);
             }
         };
 
         client.on('ready', async () => {
-            console.log(`[Dashboard ID ${index + 1}] ${client.user.tag} লগইন সফল!`);
+            console.log(`[Voice-XP ID ${index + 1}] ${client.user.tag} লগইন সফল!`);
             
-            // ভিসি-তে জয়েন করা
+            // লগইন সম্পন্ন হওয়ার ৩ সেকেন্ড পর ভিসি চ্যানেলে হিট করবে
+            await delay(3000);
             await connectToVC();
 
-            // লোগো ও টাইমারসহ স্ট্রিমিং স্ট্যাটাস (Watching Chithi Ghor)
+            // স্ট্রিমিং লোগো ও টাইমারসহ রিচ প্রেজেন্স
+            await delay(2000);
             try {
                 const r = new RichPresence(client)
                     .setType('STREAMING')
                     .setURL('https://twitch.tv')
                     .setName('Chithi Ghor')
-                    .setStartTimestamp(Date.now())
+                    .setStartTimestamp(Date.now()) // কতক্ষণ ধরে ভিসি-তে আছেন তা প্রোফাইলে দেখাবে
                     .setAssetsLargeImage('https://postimg.cc') 
                     .setAssetsLargeText('Chithi Ghor')
-                    .addButton('Join Server', 'https://discord.gg'); 
+                    .addButton('Join Server', 'https://discord.gg'); // আপনার ইনভাইট লিঙ্ক বসাবেন
 
                 client.user.setActivity(r);
             } catch (err) {
@@ -76,20 +87,20 @@ app.post('/api/start-bots', (req, res) => {
             }
         });
 
-        // 🚨 মোস্ট ইম্পর্ট্যান্ট: যদি আইডি কোনো কারণে ডিসকর্ড বা রেন্ডার থেকে ডিসকানেক্ট হয়ে যায়
+        // 🚨 ডিসকর্ড বা রেন্ডার কানেকশন ড্রপ করলে স্বয়ংক্রিয়ভাবে রিলগইন পলিসি
         client.on('shardDisconnect', () => {
-            console.log(`[Dashboard ID ${index + 1}] ডিসকানেক্ট হয়েছে! আবার কানেক্ট করার চেষ্টা করা হচ্ছে...`);
+            console.log(`[Voice-XP ID ${index + 1}] কানেকশন ড্রপ করেছে! আবার চেষ্টা করা হচ্ছে...`);
             setTimeout(() => {
                 client.login(token).catch(e => console.error("রিলগইন ব্যর্থ:", e.message));
-            }, 5000);
+            }, 7000);
         });
 
         client.login(token).catch(err => {
-            console.error(`টোকেন লগইন ব্যর্থ (ইনডেক্স: ${index + 1}):`, err.message);
+            console.error(`লগইন ব্যর্থ (ইনডেক্স: ${index + 1}):`, err.message);
         });
     });
 
-    res.json({ message: `${tokens.length}টি অ্যাকাউন্ট প্রসেস করা শুরু হয়েছে! কয়েক সেকেন্ড পর ডিসকর্ড চেক করুন।` });
+    res.json({ message: `${tokens.length}টি অ্যাকাউন্ট Voice-XP সেফ মোডে প্রসেস করা হচ্ছে। অনুগ্রহ করে ডিসকর্ড চেক করুন।` });
 });
 
 app.listen(port, () => console.log(`Dashboard running on port ${port}`));

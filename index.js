@@ -4,15 +4,18 @@ const path = require('path');
 const app = express();
 
 app.use(express.json());
+
+// এক্সপ্রেস যদি কোনো কারণে স্ট্যাটিক ফোল্ডার মিস করে, এটি সরাসরি index.html ফাইলটি পাঠাবে
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// অতিরিক্ত ব্যাকআপ হিসেবে স্ট্যাটিক রুট সচল রাখা
 app.use(express.static(path.join(__dirname, 'public')));
 
 const port = process.env.PORT || 8080; 
+// ... বাকি নিচের সব কোড (activeClients, app.post ইত্যাদি) আগে যা ছিল হুবহু তাই থাকবে।
 
-// সচল আইডিগুলো জমা রাখার গ্লোবাল অবজেক্ট
-const activeClients = {};
-
-app.post('/api/start-bots', (req, res) => {
-    const { tokens, vcId } = req.body;
 
     if (!tokens || !Array.isArray(tokens) || tokens.length === 0 || !vcId) {
         return res.status(400).json({ error: 'সঠিক টোকেন এবং ভিসি আইডি প্রদান করুন।' });
